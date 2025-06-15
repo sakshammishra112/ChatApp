@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatFlow - Real-Time Chat</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.1/stomp.min.js"></script>
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --chat-bg: #f8f9fa;
+            --message-sent: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --message-received: #ffffff;
+            --border-radius: 20px;
+            --shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        body {
+            background: var(--primary-gradient);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .chat-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+
+        .chat-header h1 {
+            margin: 0;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
+        }
+
+        .online-users {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 10px;
+            color: #666;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            background: #28a745;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .chat-area {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: var(--border-radius);
+            padding: 0;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .messages-container {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            max-height: 500px;
+            background: var(--chat-bg);
+        }
+
+        .message {
+            margin-bottom: 15px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message-bubble {
+            max-width: 70%;
+            padding: 12px 18px;
+            border-radius: 18px;
+            word-wrap: break-word;
+            position: relative;
+        }
+
+        .message-received .message-bubble {
+            background: var(--message-received);
+            border-bottom-left-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .message-sent .message-bubble {
+            background: var(--message-sent);
+            color: white;
+            margin-left: auto;
+            border-bottom-right-radius: 5px;
+            box-shadow: 0 2px 10px rgba(102, 126, 234, 0.3);
+        }
+
+        .message-info {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+            font-size: 0.85em;
+        }
+
+        .sender-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            margin-right: 10px;
+            font-size: 0.9em;
+        }
+
+        .message-time {
+            color: #999;
+            font-size: 0.75em;
+            margin-left: auto;
+        }
+
+        .system-message {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            margin: 10px 0;
+            padding: 8px 16px;
+            background: rgba(0,0,0,0.05);
+            border-radius: 15px;
+            font-size: 0.9em;
+        }
+
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            color: #666;
+            font-style: italic;
+            margin: 10px 0;
+            animation: fadeInOut 2s infinite;
+        }
+
+        @keyframes fadeInOut {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        .input-section {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            box-shadow: var(--shadow);
+        }
+
+        .username-section {
+            margin-bottom: 15px;
+        }
+
+        .input-group-custom {
+            display: flex;
+            gap: 10px;
+        }
+
+        .form-control-custom {
+            border: 2px solid #e9ecef;
+            border-radius: 25px;
+            padding: 12px 20px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .form-control-custom:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+            outline: none;
+        }
+
+        .btn-send {
+            background: var(--primary-gradient);
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-send:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-send:disabled {
+            opacity: 0.6;
+            transform: none;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            border-radius: 25px;
+            font-size: 0.85em;
+            font-weight: 500;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        .connection-status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .connection-status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        /* Mobile Responsiveness */
+        @media (max-width: 768px) {
+            .chat-container {
+                padding: 10px;
+            }
+
+            .message-bubble {
+                max-width: 85%;
+            }
+
+            .chat-header h1 {
+                font-size: 1.5rem;
+            }
+        }
+
+        /* Scrollbar Styling */
+        .messages-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .messages-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 10px;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+    </style>
+</head>
+<body>
+<div class="connection-status" id="connectionStatus">
+    <i class="fas fa-wifi"></i> Connecting...
+</div>
+
+<div class="chat-container">
+    <div class="chat-header">
+        <h1><i class="fas fa-comments"></i> ChatFlow</h1>
+        <div class="online-users">
+            <div class="status-indicator"></div>
+            <span id="onlineCount">1 user online</span>
+        </div>
+    </div>
+
+    <div class="chat-area">
+        <div class="messages-container" id="messagesContainer">
+            <div class="system-message">
+                <i class="fas fa-info-circle"></i> Welcome to ChatFlow! Enter your name and start chatting.
+            </div>
+        </div>
+        <div id="typingIndicator" class="typing-indicator" style="display: none;">
+            <i class="fas fa-ellipsis-h"></i> <span id="typingText">Someone is typing...</span>
+        </div>
+    </div>
+
+    <div class="input-section">
+        <div class="username-section" id="usernameSection">
+            <div class="input-group-custom">
+                <input type="text" id="usernameInput" class="form-control-custom"
+                       placeholder="Enter your name to join..." maxlength="20">
+                <button id="joinBtn" class="btn-send">
+                    <i class="fas fa-sign-in-alt"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="message-section" id="messageSection" style="display: none;">
+            <div class="input-group-custom">
+                <input type="text" id="messageInput" class="form-control-custom"
+                       placeholder="Type your message..." maxlength="500">
+                <button id="sendBtn" class="btn-send" disabled>
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let stompClient = null;
+    let currentUser = null;
+    let userColor = null;
+    let typingTimer = null;
+    let isTyping = false;
+
+    // Connection status management
+    function updateConnectionStatus(connected) {
+        const statusElement = document.getElementById('connectionStatus');
+        const sendBtn = document.getElementById('sendBtn');
+
+        if (connected) {
+            statusElement.textContent = '✓ Connected';
+            statusElement.className = 'connection-status connected';
+            sendBtn.disabled = false;
+        } else {
+            statusElement.textContent = '✗ Disconnected';
+            statusElement.className = 'connection-status disconnected';
+            sendBtn.disabled = true;
+        }
+    }
+
+    // Connect to WebSocket
+    function connect() {
+        const socket = new SockJS('/chat');
+        stompClient = Stomp.over(socket);
+
+        stompClient.connect({}, function(frame) {
+            updateConnectionStatus(true);
+
+            // Subscribe to messages
+            stompClient.subscribe('/topic/messages', function(message) {
+                showMessage(JSON.parse(message.body));
+            });
+
+            // Subscribe to typing indicators
+            stompClient.subscribe('/topic/typing', function(message) {
+                showTypingIndicator(JSON.parse(message.body));
+            });
+
+            // Subscribe to user count updates
+            stompClient.subscribe('/topic/userCount', function(message) {
+                updateUserCount(JSON.parse(message.body));
+            });
+
+        }, function(error) {
+            updateConnectionStatus(false);
+            console.error('Connection error:', error);
+            setTimeout(connect, 5000); // Retry connection
+        });
+    }
+
+    // Join chat
+    function joinChat() {
+        const username = document.getElementById('usernameInput').value.trim();
+        if (!username) {
+            showNotification('Please enter your name', 'error');
+            return;
+        }
+
+        currentUser = username;
+        userColor = getRandomColor();
+
+        // Send join message
+        const joinMessage = {
+            sender: username,
+            type: 'JOIN',
+            senderColor: userColor
+        };
+
+        stompClient.send('/app/addUser', {}, JSON.stringify(joinMessage));
+
+        // Switch to chat mode
+        document.getElementById('usernameSection').style.display = 'none';
+        document.getElementById('messageSection').style.display = 'block';
+        document.getElementById('messageInput').focus();
+    }
+
+    // Send message
+    function sendMessage() {
+        const messageInput = document.getElementById('messageInput');
+        const content = messageInput.value.trim();
+
+        if (!content || !currentUser) return;
+
+        const chatMessage = {
+            sender: currentUser,
+            content: content,
+            type: 'CHAT',
+            senderColor: userColor
+        };
+
+        stompClient.send('/app/sendMessage', {}, JSON.stringify(chatMessage));
+        messageInput.value = '';
+        stopTyping();
+    }
+
+    // Show message in chat
+    function showMessage(message) {
+        const messagesContainer = document.getElementById('messagesContainer');
+
+        if (message.type === 'JOIN' || message.type === 'LEAVE') {
+            const systemMessage = document.createElement('div');
+            systemMessage.className = 'system-message';
+            systemMessage.innerHTML = `<i class="fas fa-user-plus"></i> ${message.content}`;
+            messagesContainer.appendChild(systemMessage);
+        } else if (message.type === 'CHAT') {
+            const messageDiv = document.createElement('div');
+            const isOwnMessage = message.sender === currentUser;
+
+            messageDiv.className = `message ${isOwnMessage ? 'message-sent' : 'message-received'}`;
+
+            const time = new Date(message.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+            messageDiv.innerHTML = `
+                ${!isOwnMessage ? `
+                    <div class="message-info">
+                        <div class="sender-avatar" style="background: ${message.senderColor}">
+                            ${message.sender.charAt(0).toUpperCase()}
+                        </div>
+                        <span class="sender-name">${message.sender}</span>
+                        <span class="message-time">${time}</span>
+                    </div>
+                ` : ''}
+                <div class="message-bubble">
+                    ${message.content}
+                    ${isOwnMessage ? `<div class="message-time" style="text-align: right; margin-top: 5px; font-size: 0.7em; opacity: 0.8;">${time}</div>` : ''}
+                </div>
+            `;
+
+            messagesContainer.appendChild(messageDiv);
+        }
+
+        // Scroll to bottom
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    // Typing indicator
+    function showTypingIndicator(message) {
+        if (message.sender === currentUser) return;
+
+        const indicator = document.getElementById('typingIndicator');
+        const typingText = document.getElementById('typingText');
+
+        typingText.textContent = `${message.sender} is typing...`;
+        indicator.style.display = 'flex';
+
+        // Hide after 3 seconds
+        setTimeout(() => {
+            indicator.style.display = 'none';
+        }, 3000);
+    }
+
+    function startTyping() {
+        if (!isTyping && currentUser) {
+            isTyping = true;
+            const typingMessage = {
+                sender: currentUser,
+                type: 'TYPING'
+            };
+            stompClient.send('/app/typing', {}, JSON.stringify(typingMessage));
+        }
+    }
+
+    function stopTyping() {
+        isTyping = false;
+        clearTimeout(typingTimer);
+    }
+
+    // Update user count display
+    function updateUserCount(message) {
+        const userCount = parseInt(message.content);
+        const onlineCountElement = document.getElementById('onlineCount');
+        onlineCountElement.textContent = `${userCount} user${userCount !== 1 ? 's' : ''} online`;
+    }
+
+    // Utility functions
+    function getRandomColor() {
+        const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'];
+        return colors[Math.floor(Math.random() * colors.length)];
+    }
+
+    function showNotification(message, type = 'info') {
+        // Simple notification - you could enhance this with a toast library
+        alert(message);
+    }
+
+    // Event listeners
+    document.getElementById('joinBtn').addEventListener('click', joinChat);
+    document.getElementById('sendBtn').addEventListener('click', sendMessage);
+
+    document.getElementById('usernameInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            joinChat();
+        }
+    });
+
+    document.getElementById('messageInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            sendMessage();
+        } else {
+            startTyping();
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(stopTyping, 2000);
+        }
+    });
+
+    // Initialize connection on page load
+    window.addEventListener('load', connect);
+
+    // Handle page unload
+    window.addEventListener('beforeunload', function() {
+        if (stompClient && currentUser) {
+            const leaveMessage = {
+                sender: currentUser,
+                content: currentUser + ' left the chat',
+                type: 'LEAVE'
+            };
+            stompClient.send('/app/sendMessage', {}, JSON.stringify(leaveMessage));
+        }
+    });
+</script>
+</body>
+</html>
