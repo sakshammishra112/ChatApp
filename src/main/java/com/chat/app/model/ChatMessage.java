@@ -86,11 +86,4 @@ public class ChatMessage {
         this.senderColor = senderColor;
     }
 
-    // Constructor for quick message creation
-    public ChatMessage(String sender, String content, MessageType type) {
-        this.sender = sender;
-        this.content = content;
-        this.type = type;
-        this.timestamp = LocalDateTime.now();
-    }
 }
